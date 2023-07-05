@@ -1,0 +1,383 @@
+---
+title: | 
+  | Bayesian analysis for male fertility
+  | 
+author: | 
+  | Enrico Grimaldi
+  | 1884443
+  |
+date: | 
+  | Final project for the course:
+  | Statistical Methods for Data Science 2
+  |
+  | La Sapienza University of Rome
+  | a.y. 2022/2023
+  |
+output: 
+  pdf_document: default
+  html_document: default
+toc: no
+number_sections: true
+bibliography: bibliography.bib
+biblio-style: "apalike"
+fontsize: 12pt
+header-includes:
+  - \usepackage{adjustbox}
+  - \usepackage{amsmath}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, results = "hide")
+```
+
+```{r}
+# import libraries 
+library(tidyverse)
+library(gt)
+library(summarytools)
+library(gridExtra)
+library(ggplot2)
+library(corrplot)
+library(reshape2)
+library(R2jags)
+```
+
+
+\newpage
+```{=latex}
+\setcounter{tocdepth}{4}
+\tableofcontents
+```
+\newpage
+
+# 1.  Introduction
+
+In Italy, the issue of fertility is quite central in recent years, especially in the post-covid period, there has even been talk of a recessionary phase in terms of birth rates. The underlying causes are many and particularly diverse. For example, among the causes of the decline in first children is the prolonged stay of young people in the family of origin, which in turn is due to multiple factors: the protracted length of time in education, the difficulties young people face in entering the world of work and the widespread instability of work itself, difficulties in accessing the housing market, a long-term trend of low economic growth, as well as other possible factors of a cultural nature.
+
+Moreover, Italy is a country with a high level of emigration and a tendency on the part of the younger age group to seek more prosperous opportunities abroad, leading to a lower average age.
+
+In addition to this purely socio-economic reasons and the crisis the country is experiencing in this regard, another rather worrying trend was found to be strongly affecting the birth rate in most Western countries: an analysis of 56 countries from 6 different continents recorded a halving in sperm count from 1973 to 2018.
+
+The fertility status of men affects the issue introduced above in a worrisome way and needs more attention and awareness.
+
+The aim of our analysis is to study the main sources of infertility for a man. Given a data set with a set of attributes deemed more or less informative, we choose to use a simple Bayesian logistic regression for the prediction of subject with normal or altered sperm (analyzed according to the WHO (2010) criteria).
+
+What we seek to highlight through this study is the relationship between bad habits, health status, context (environment, social, and time of year), and fertility level.
+
+Keep in mind, however, that the real goal of the project is not to achieve high prediction performance but to analyze the model parameters and infer how individual covariates affect the (binary) label value.
+
+Let's give a look to the first rows of the [used data set](https://archive.ics.uci.edu/dataset/244/fertility) from the [UCI repository](https://archive.ics.uci.edu/datasets):
+\
+\
+```{r results='asis'}
+# get the data set
+Fertility.data <- read.csv("fertility_Diagnosis.txt")
+
+colnames(Fertility.data) <- c("Season", "Age", "Disease", "Accident", "Surgery", "Fever", "Alcohol", "Smoking", "Sedentarity", "Out")
+
+# give a look
+head(Fertility.data) %>%gt() %>% tab_options(., table.width = 200)
+```
+\newpage
+
+# 2.  Exploratory data analysis
+
+## 2.1  Overview of the data set
+```{r results='asis'}
+
+custom_dfSummary <- function(data, ...) {
+  summary_output <- capture.output(dfSummary(data, ...))
+  summary_output <- summary_output[-(1:2)] # Remove the first 2 lines
+  cat(summary_output, sep = "\n")
+}
+
+custom_dfSummary(Fertility.data, 
+          plain.ascii  = FALSE,
+          style        = 'grid',
+          graph.magnif = 0.85,
+          varnumbers = FALSE,
+          valid.col    = FALSE,
+          tmp.img.dir  = "/tmp")
+```
+
+\newpage
+
+As can be noted from the table above ($100 \times 10$) the data set is mostly characterized by categorical variables hashed into numeric (discrete) variables and to a lesser extent by discrete range-limited variables. In each case there are no missing values for any attribute and the values that can be assumed have a very specific meaning as below:
+
+* **Season** $\rightarrow$ season in which the analysis was performed:
+    + winter = -1;
+    + spring = -0.33;
+    + summer = 0.33; 
+    + fall = 1.
+
+* **Age** $\rightarrow$ age at the time of analysis normalized from (18,36) to (0, 1) 
+
+* **Disease** $\rightarrow$ childish diseases (i.e., chicken pox, measles, mumps, polio) yes/no (0, 1) 
+
+* **Accident** $\rightarrow$ accident or serious trauma,  yes/no  $\rightarrow$ (0, 1) 
+
+* **Surgery** $\rightarrow$ surgical intervention,  yes/no  $\rightarrow$ (0, 1) 
+
+* **Fever** $\rightarrow$ high fevers in the last year:
+    + less than three months ago = -1;
+    + more than three months ago = 0;
+    + no = 1.
+
+* **Alcohol** $\rightarrow$ frequency of alcohol consumption (quantized in 5 numbers $\in (0,1)$):
+    + several times a day;
+    + every day;
+    + several times a week;
+    + once a week;
+    + hardly ever or never.
+
+* **Smoking** $\rightarrow$ smoking habit:
+    + never = 1;
+    + occasional = 0;
+    + daily = 1.
+
+* **Sedentarity** $\rightarrow$ number of hours spent sitting per day (normalized to 16 hours) 
+
+* **Out** $\rightarrow$ diagnosis:
+    + normal (N);
+    + altered (O).
+
+\newpage
+
+## 2.2  Plot and visualize
+
+```{r results='markup'}
+# Create named vector of labels
+alcohol_labels <- c("0.2" = "hardly ever or never", 
+                    "0.4" = "once a week",
+                    "0.6" = "several times a week", 
+                    "0.8" = "every day",
+                    "1" = "several times a day")
+season_labels <- c("-1" = "winter",
+                   "-0.33" = "spring",
+                   "0.33" = "summer",
+                   "1" = "fall")
+age_labels <- c("0.5"=18, "0.53"=19, "0.56"=20, "0.58"=21, "0.61"=22,
+                "0.64"=23, "0.67"=24, "0.69"=25, "0.72"=26, "0.75"=27,
+                "0.78"=28, "0.81"=29, "0.83"=30, "0.86"=31, "0.89"=32,
+                "0.92"=33, "0.94"=34, "1"=35)
+
+# Create a copy of the dataframe to avoid modifying the original
+Fertility.data.mapped <- Fertility.data
+Fertility.data.mapped$Alcohol <- as.character(Fertility.data.mapped$Alcohol)
+Fertility.data.mapped$Season <- as.character(Fertility.data.mapped$Season)
+Fertility.data.mapped$Age <- as.character(Fertility.data.mapped$Age)
+Fertility.data.mapped <- Fertility.data.mapped %>%
+  mutate(Alcohol = alcohol_labels[Alcohol],
+         Season=season_labels[Season],
+         Age=age_labels[Age])
+
+# let's plot
+p1 <- ggplot(Fertility.data, aes(x=Sedentarity, fill=Out)) +
+  geom_histogram(aes(y = ..density..), alpha=0.5, position='identity') +
+  labs(title="Sedentarity distribution in Altered and Normal People",
+       x="Sedentarity Level", y="Density") +
+  theme_minimal() +
+  scale_fill_manual(values=c("#999999", "#E69F00"), 
+                    name="Diagnosis", 
+                    breaks=c("O", "N"), 
+                    labels=c("Altered", "Normal"))
+
+p2 <- ggplot(Fertility.data.mapped, aes(x=Age, fill=Out)) +
+  geom_histogram(aes(y = ..density..), alpha=0.5, position='identity') +
+  labs(title="Age distribution",
+       x="Age", y="Density") +
+  theme_minimal() +
+  scale_fill_manual(values=c("salmon", "red"), 
+                    name="Diagnosis", 
+                    breaks=c("O", "N"), 
+                    labels=c("Altered", "Normal"))
+
+grid.arrange(p1, p2, nrow = 2)
+
+```
+\
+\
+
+First, let's try to analyze two distributions by distinguishing them for subjects we know have "Altered or "Normal" sperm counts:
+
+1. *Sedentarity distribution*: in both cases it seems to behave as a normal (or similar) distribution concentrated around a mean value;
+2. *Age distribution*: unlike the previous case it seems that the two populations show different peaks and in particular the "Normal" population shows a rather flat pattern.\
+
+We chose to focus on these distributions first because they are characterized by a wide range of values relative to the rest of the other variables, and to provide an initial perspective on how aspects of the individual, both in terms of habits (sedentarity) and in terms of intrinsic characteristics (age), may exhibit similar patterns.\
+
+The main inferences we can draw from these plots are that:
+
+- The "Normal" population has smaller peaks in its concentration (but this difference could also be due to the scarcity of samples for "Altered" diagnoses).
+- Very high levels of sedentariness and older age (than the considered average) are not necessarily a cause of infertility but may influence it. It should be remembered in particular that the age range was limited and one possible explanation for the peak around age 25 is that those years generally see a certain group of subjects facing important periods of stress as they transition to the world of work.
+
+\
+
+```{r}
+p3 <- ggplot(data = Fertility.data.mapped, aes(x = Alcohol, fill = Out)) +
+  geom_bar(show.legend = TRUE, position="dodge") +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  labs(x=NULL, y="count", title="Alcohol consumption for our sample")+
+  scale_fill_manual(values=c("chocolate", "aquamarine"), 
+                    name="Diagnosis: ", 
+                    breaks=c("O", "N"), 
+                    labels=c("Altered", "Normal"))
+
+# Calculate the percentage of altered diagnosis for each season
+df_sum <- Fertility.data %>%
+  group_by(Season) %>%
+  summarise(total = n(), positive = sum(Out == "O"), .groups = 'drop') %>%
+  mutate(percentage = positive / total)
+
+p4 <- ggplot(data = Fertility.data.mapped, aes(x = Season, fill = Season)) +
+  geom_bar(show.legend = F) +
+  labs(x = NULL, 
+       y="Percentage",
+       title = "Seasonal percentage of 'Altered' diagnosis") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2")
+
+grid.arrange(p4, p3, nrow = 2)
+```
+\
+
+As a second interesting analysis we report how two very different variables influence the number (or percentage) of "Altered" subjects:
+
+- the variable _"Season"_ directly related to the external environment and decisive (probably also due to other hidden variables) in defining the class of our sample;
+- the variable _"Alcohol"_ linked again to the habits of the subject and considered by the scientific literature to be of relevant importance in our classification problem.
+
+## 2.3  Study of the correlations
+
+```{r}
+out_labels <- c("O"=1, "N"=0)
+# map the label column to a numeric value
+Fertility.data <- Fertility.data %>%
+  mutate(Out=out_labels[Out])
+
+# Calculate correlations
+correlations <- cor(Fertility.data)
+
+# Set lower triangle (including diagonal) to NA
+correlations[lower.tri(correlations, diag = TRUE)] <- NA
+
+# Melt the correlation matrix to long format for ggplot
+corr_melted <- melt(correlations, na.rm = TRUE)
+
+# Generate the correlation plot
+ggplot(data = corr_melted, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab", 
+                       name="Pearson\nCorrelation") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                    size = 12, hjust = 1),
+        axis.text.y = element_text(size = 12), panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), panel.background = element_blank()) +
+  labs(x=NULL, y=NULL, title="Correlations between features")
+  coord_fixed()
+
+```
+
+\
+
+# 3. Proposed statistical models
+
+Given the binary nature of the output (varaible "Diagnosis"/"Out") it is considered valid to consider a model that is as simple as it is effective: a *Bayesian logistic regression*. This model will be used to classify subjects into "Altered" or "Normal" but the real goal is to study the estimation of the mean value of our output variable as a composition of the parameters of interest.
+
+## 3.1  Bayesian logistic regression model 
+
+The Bayesian logistic regressin model defines the distribution of the output variable as a Bernullian of parameter $p$ (mean of the distribution) in particular implies the following parameterization and prior distributions of the parameters:
+
+\begin{gather}
+Y|p \sim Ber(p) \nonumber \\
+E[Y|p] = p  \nonumber \\
+logit(p) = \beta_{Seas} \cdot X_1 + \beta_{Age} \cdot X_2 + \beta_{Dis} \cdot X_3  + \beta_{Acc} \cdot X_4 + \beta_{Surg} \cdot X_5 +  \beta_{Al} \cdot X_6 + \nonumber \\ 
++ \beta_{Fev} \cdot X_7 + \beta_{Smok} \cdot X_8 + \beta_{Sed} \cdot X_9 \nonumber \\
+\beta_{Seas} \sim N(0, \sigma_{Seas}) \nonumber \\
+\beta_{Age} \sim N(0, \sigma_{Age}) \nonumber \\
+\beta_{Dis} \sim N(0, \sigma_{Dis}) \nonumber \\
+\beta_{Acc} \sim N(0, \sigma_{Acc}) \nonumber \\
+\beta_{Surg} \sim N(0, \sigma_{Surg}) \nonumber \\
+\beta_{Al} \sim N(0, \sigma_{Al}) \nonumber \\
+\beta_{Fev} \sim N(0, \sigma_{Fev}) \nonumber \\
+\beta_{Smok} \sim N(0, \sigma_{Smok}) \nonumber \\
+\beta_{Sed} \sim N(0, \sigma_{Sed}) \nonumber
+\end{gather}
+
+The logistic regression coefficient $\beta$ associated with a predictor $X$ is the expected change in log odds of having the outcome per unit change in $X$. So increasing the predictor by 1 unit (or going from 1 level to the next) multiplies the odds of having the outcome by $e^\beta$.\
+
+Summarizing then, a prior was defined for each parameter (each related to a specific feature of the data set), and the mean $p$ of our Bernoulli variable in output $Y$ is defined as the following transformation of the above parameters:
+
+$$
+P(Y=1) = p = \frac 1 {1 + e^{\sum_i \beta_i X_i}}
+$$
+
+To predict the fertility status (binary) of a man we will then use the logistic function (inverse of logit), obtaining a likelihood in view of our prior beliefs about the parameters.
+
+## 3.2  Bayesian probit regression model
+
+
+# First model
+
+```{r}
+mu_0 <- 0
+sig_0 <- 1.0E-6
+N <- dim(Fertility.data)[1]
+
+dd <- list("Y" = Fertility.data$Out,
+           "Season"= Fertility.data$Season,
+           "Age"= Fertility.data$Age,
+           "Disease"= Fertility.data$Disease,
+           "Accident"= Fertility.data$Accident,
+           "Surgery"= Fertility.data$Surgery,
+           "Fever"= Fertility.data$Fever,
+           "Alcohol"= Fertility.data$Alcohol,
+           "Smoking"= Fertility.data$Smoking,
+           "Sedentarity"= Fertility.data$Sedentarity,
+           "N" = N, "mu_0" = mu_0, "sig_0"= sig_0)
+
+params <- c("p","beta0", "beta1", "beta2", "beta2", "beta3", "beta4", "beta5",
+            "beta6", "beta7", "beta8", "beta9")
+
+inits <- list(list("beta0" = 0, "beta1" = 0, "beta2" = 0, "beta3" = 0,
+                   "beta4" = 0, "beta5" = 0, "beta6" = 0, "beta7" = 0, "beta8" = 0, "beta9" = 0),
+              list("beta0" = 0.1, "beta1" = 0.1, "beta2" = 0.1, "beta3" = 0.1, "beta4" = 0.1,
+                   "beta5" = 0.1, "beta6" = 0.1, "beta7" = 0.1, "beta8" = 0.1, "beta9" = 0.1),
+              list("beta0" = 0.2, "beta1" = 0.2, "beta2" = 0.2, "beta3" = 0.2, "beta4" = 0.2,
+                   "beta5" = 0.2, "beta6" = 0.2, "beta7" = 0.2, "beta8" = 0.2, "beta9" = 0.2))
+
+my.logistic <- jags(data=dd,
+                    inits=inits,
+                    parameters.to.save=params,
+                    model.file="log_regr.txt",
+                    n.chains=3,
+                    n.iter=2000, 
+                    n.burnin=1)
+
+```
+## MCMC convergence analysis
+
+```{r}
+library(coda)
+mcmc_samples <- as.mcmc(my.logistic)
+
+# Get only beta parameters
+betas <- mcmc_samples[, grep("^beta", varnames(mcmc_samples))]
+
+# Traceplots
+traceplot(betas)
+
+# ACF plots
+autocorr.plot(betas)
+
+# Gelman-Rubin diagnostic (should be close to 1 for convergence)
+# gelman.diag(mcmc_samples)
+
+# Effective sample size (should be large for reliable estimates)
+effectiveSize(mcmc_samples)
+
+```
+
+
+# References
