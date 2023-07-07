@@ -521,8 +521,28 @@ my.probit <- jags(data=dd,
                   n.iter=10000, 
                   n.burnin=2000)
 
-
-
 ```
+```{r}
+coeffs2 <- colMeans(my.probit$BUGSoutput$sims.matrix)
+
+probit.func <- function(coeffs, test, threshold){
+   # Extract coefficients
+  intercept <- coeffs[1]
+  coefficients <- coeffs[-1]
+  
+  # Calculate linear predictor
+  linear_predictor <- ntercept + as.matrix(test) %*% coefficients
+  
+  # Calculate predicted probabilities using Probit function
+  predicted_probs <- pnorm(linear_predictor)
+  
+  # Return predicted probabilities
+  return(predicted_probs)
+}
+
+preds <- log.func(coeffs2, test, 0.2)
+sum(test$Out==preds)/length(preds)
+```
+
 
 # References
