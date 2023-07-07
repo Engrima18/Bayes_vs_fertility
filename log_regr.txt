@@ -1,7 +1,10 @@
-model {
+model  {
     for (i in 1:N) {
         Y[i] ~ dbern(p[i])
-        logit(p[i]) <- beta0 + beta1*Season[i] + beta2*Age[i] + beta3*Disease[i] + beta4*Accident[i] + beta5*Surgery[i] + beta6*Fever[i] + beta7*Alcohol[i] + beta8*Smoking[i] + beta9*Sedentarity[i]
+        logit(p[i]) <- beta0 + beta1*Season[i] + beta2*Age[i]
+        + beta3*Disease[i] + beta4*Accident[i] + beta5*Surgery[i]
+        + beta6*Fever[i] + beta7*Alcohol[i] + beta8*Smoking[i]
+        + beta9*Sedentarity[i]
     }
 
     # Priors
@@ -15,4 +18,4 @@ model {
     beta7 ~ dnorm(mu_0, sig_0)
     beta8 ~ dnorm(mu_0, sig_0)
     beta9 ~ dnorm(mu_0, sig_0)
-}
+    }

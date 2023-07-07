@@ -40,6 +40,8 @@ library(ggplot2)
 library(corrplot)
 library(reshape2)
 library(R2jags)
+library(mcmcplots)
+library(caret)
 ```
 
 
@@ -287,13 +289,18 @@ Given the binary nature of the output (varaible "Diagnosis"/"Out") it is conside
 
 ## 3.1  Bayesian logistic regression model 
 
-The Bayesian logistic regressin model defines the distribution of the output variable as a Bernullian of parameter $p$ (mean of the distribution) in particular implies the following parameterization and prior distributions of the parameters:
+The Bayesian logistic regression model defines the distribution of the output random variable as a Bernoulli of parameter $p$ (mean of the distribution), in particular implies the following parameterization and prior distributions of the parameters:
 
 \begin{gather}
 Y|p \sim Ber(p) \nonumber \\
 E[Y|p] = p  \nonumber \\
 logit(p) = \beta_{Seas} \cdot X_1 + \beta_{Age} \cdot X_2 + \beta_{Dis} \cdot X_3  + \beta_{Acc} \cdot X_4 + \beta_{Surg} \cdot X_5 +  \beta_{Al} \cdot X_6 + \nonumber \\ 
-+ \beta_{Fev} \cdot X_7 + \beta_{Smok} \cdot X_8 + \beta_{Sed} \cdot X_9 \nonumber \\
++ \beta_{Fev} \cdot X_7 + \beta_{Smok} \cdot X_8 + \beta_{Sed} \cdot X_9 \nonumber
+\end{gather}
+
+The logistic regression coefficients $\beta$ associated with a predictor $X$ represents the relationship between the output variable and a specific feature: it is the expected change in log odds of having the outcome per unit change in $X$. So increasing the predictor by 1 unit (or going from 1 level to the next) multiplies the odds of having the outcome by $e^\beta$.
+
+\begin{gather}
 \beta_{Seas} \sim N(0, \sigma_{Seas}) \nonumber \\
 \beta_{Age} \sim N(0, \sigma_{Age}) \nonumber \\
 \beta_{Dis} \sim N(0, \sigma_{Dis}) \nonumber \\
@@ -304,8 +311,6 @@ logit(p) = \beta_{Seas} \cdot X_1 + \beta_{Age} \cdot X_2 + \beta_{Dis} \cdot X_
 \beta_{Smok} \sim N(0, \sigma_{Smok}) \nonumber \\
 \beta_{Sed} \sim N(0, \sigma_{Sed}) \nonumber
 \end{gather}
-
-The logistic regression coefficient $\beta$ associated with a predictor $X$ is the expected change in log odds of having the outcome per unit change in $X$. So increasing the predictor by 1 unit (or going from 1 level to the next) multiplies the odds of having the outcome by $e^\beta$.\
 
 Summarizing then, a prior was defined for each parameter (each related to a specific feature of the data set), and the mean $p$ of our Bernoulli variable in output $Y$ is defined as the following transformation of the above parameters:
 
@@ -318,65 +323,151 @@ To predict the fertility status (binary) of a man we will then use the logistic 
 ## 3.2  Bayesian probit regression model
 
 
-# First model
+# 4 First model
+
+The first model then consists of a simple logistic regression in which the parameters used are relative to each of the variables in the original data set. 
+
+The model is written with JAGS (just another gibbs sampler), which allows us to easily pursue sampling methods based on Monte Carlo Markov Chains.
+
+```{r include=TRUE, echo=TRUE}
+
+cat("model  {
+    for (i in 1:N) {
+        Y[i] ~ dbern(p[i])
+        logit(p[i]) <- beta0 + beta1*Season[i] + beta2*Age[i]
+        + beta3*Disease[i] + beta4*Accident[i] + beta5*Surgery[i]
+        + beta6*Fever[i] + beta7*Alcohol[i] + beta8*Smoking[i]
+        + beta9*Sedentarity[i]
+    }
+
+    # Priors
+    beta0 ~ dnorm(mu_0, sig_0)
+    beta1 ~ dnorm(mu_0, sig_0)
+    beta2 ~ dnorm(mu_0, sig_0)
+    beta3 ~ dnorm(mu_0, sig_0)
+    beta4 ~ dnorm(mu_0, sig_0)
+    beta5 ~ dnorm(mu_0, sig_0)
+    beta6 ~ dnorm(mu_0, sig_0)
+    beta7 ~ dnorm(mu_0, sig_0)
+    beta8 ~ dnorm(mu_0, sig_0)
+    beta9 ~ dnorm(mu_0, sig_0)
+    }",
+    file = "log_regr.txt")
+
+```
+
+For this specific model:
+
+>- three Markov chains are used;
+>- we set 2000 iterations;
+>- no strategy is applied for the exclusion of burn-in samples.
 
 ```{r}
+set.seed(123)
+
+# split the data frame into train and test sets
+trainIndex <- createDataPartition(Fertility.data$Out, p = 0.7, list = FALSE)
+
+# create the train set
+train <- Fertility.data[trainIndex, ]
+
+# create the test set
+test <- Fertility.data[-trainIndex, ]
+```
+
+
+```{r }
 mu_0 <- 0
 sig_0 <- 1.0E-6
-N <- dim(Fertility.data)[1]
+N <- dim(train)[1]
 
-dd <- list("Y" = Fertility.data$Out,
-           "Season"= Fertility.data$Season,
-           "Age"= Fertility.data$Age,
-           "Disease"= Fertility.data$Disease,
-           "Accident"= Fertility.data$Accident,
-           "Surgery"= Fertility.data$Surgery,
-           "Fever"= Fertility.data$Fever,
-           "Alcohol"= Fertility.data$Alcohol,
-           "Smoking"= Fertility.data$Smoking,
-           "Sedentarity"= Fertility.data$Sedentarity,
+dd <- list("Y" = train$Out,
+           "Season"= train$Season,
+           "Age"= train$Age,
+           "Disease"= train$Disease,
+           "Accident"= train$Accident,
+           "Surgery"= train$Surgery,
+           "Fever"= train$Fever,
+           "Alcohol"= train$Alcohol,
+           "Smoking"= train$Smoking,
+           "Sedentarity"= train$Sedentarity,
            "N" = N, "mu_0" = mu_0, "sig_0"= sig_0)
 
-params <- c("p","beta0", "beta1", "beta2", "beta2", "beta3", "beta4", "beta5",
-            "beta6", "beta7", "beta8", "beta9")
+params <- c("beta0", "beta1", "beta2", "beta2", "beta3",
+            "beta4", "beta5","beta6", "beta7", "beta8", 
+            "beta9")
 
-inits <- list(list("beta0" = 0, "beta1" = 0, "beta2" = 0, "beta3" = 0,
-                   "beta4" = 0, "beta5" = 0, "beta6" = 0, "beta7" = 0, "beta8" = 0, "beta9" = 0),
-              list("beta0" = 0.1, "beta1" = 0.1, "beta2" = 0.1, "beta3" = 0.1, "beta4" = 0.1,
-                   "beta5" = 0.1, "beta6" = 0.1, "beta7" = 0.1, "beta8" = 0.1, "beta9" = 0.1),
-              list("beta0" = 0.2, "beta1" = 0.2, "beta2" = 0.2, "beta3" = 0.2, "beta4" = 0.2,
-                   "beta5" = 0.2, "beta6" = 0.2, "beta7" = 0.2, "beta8" = 0.2, "beta9" = 0.2))
+inits <- list(list("beta0" = 0, "beta1" = 0, "beta2" = 0,
+                   "beta3" = 0, "beta4" = 0, "beta5" = 0,
+                   "beta6" = 0, "beta7" = 0, "beta8" = 0,
+                   "beta9" = 0),
+              list("beta0" = 0.1, "beta1" = 0.1, "beta2" = 0.1,
+                   "beta3" = 0.1, "beta4" = 0.1,
+                   "beta5" = 0.1, "beta6" = 0.1, "beta7" = 0.1,
+                   "beta8" = 0.1, "beta9" = 0.1),
+              list("beta0" = 0.2, "beta1" = 0.2, "beta2" = 0.2,
+                   "beta3" = 0.2, "beta4" = 0.2,
+                   "beta5" = 0.2, "beta6" = 0.2, "beta7" = 0.2,
+                   "beta8" = 0.2, "beta9" = 0.2))
 
 my.logistic <- jags(data=dd,
                     inits=inits,
                     parameters.to.save=params,
                     model.file="log_regr.txt",
                     n.chains=3,
-                    n.iter=2000, 
-                    n.burnin=1)
-
+                    n.iter=10000, 
+                    n.burnin=2000)
 ```
-## MCMC convergence analysis
+```{r results='markup'}
+#mcmc_samples <- as.mcmc(my.logistic)
+
+# Summarize MCMC samples
+# summary_table <- summary(mcmc_samples)
+
+# Extract relevant information
+# parameter <- rownames(summary_table)
+# mean <- summary_table[, 2]
+# sd <- summary_table[, "SD"]
+# quantiles <- apply(summary_table[, c("2.5%", "25%", "50%", "75%", "97.5%")], 2, paste, collapse = "-")
+
+# Create data frame
+# summary_df <- data.frame(Parameter = parameter, Mean = mean, SD = sd, Quantiles = quantiles, row.names = NULL)
+
+# Display summary in a nice table format
+# kable(summary_df, format = "markdown", align = "c") %>%
+# kable_styling()
+```
+
+
+## 5 MCMC convergence analysis
 
 ```{r}
-library(coda)
-mcmc_samples <- as.mcmc(my.logistic)
-
-# Get only beta parameters
-betas <- mcmc_samples[, grep("^beta", varnames(mcmc_samples))]
-
-# Traceplots
-traceplot(betas)
+traplot(my.logistic, params)
 
 # ACF plots
-autocorr.plot(betas)
+#autocorr.plot(betas)
 
 # Gelman-Rubin diagnostic (should be close to 1 for convergence)
 # gelman.diag(mcmc_samples)
 
 # Effective sample size (should be large for reliable estimates)
-effectiveSize(mcmc_samples)
+# effectiveSize(mcmc_samples)
 
+```
+
+
+# Prediction
+
+```{r}
+coeffs <- colMeans(my.logistic$BUGSoutput$sims.matrix)
+
+log.func <- function(coeffs, test.set){
+  preds <- 0
+  for(i in length(coeffs)){
+    preds <- coeff * 
+  }
+}
+preds <- 
 ```
 
 
