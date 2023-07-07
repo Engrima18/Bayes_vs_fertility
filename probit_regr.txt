@@ -4,7 +4,7 @@ model {
         + beta3*Disease[i] + beta4*Accident[i] + beta5*Surgery[i]
         + beta6*Fever[i] + beta7*Alcohol[i] + beta8*Smoking[i]
         + beta9*Sedentarity[i]
-      y[i] ~ dinterval(z[i], 0, 1)
+      Y[i] ~ dbern(pnorm(z[i], 0, 1))
     }
 
     # Priors
