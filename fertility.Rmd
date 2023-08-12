@@ -7,12 +7,12 @@ author: |
   | 1884443
   |
 date: | 
-  | Final project for the course:
   | Statistical Methods for Data Science 2
   |
   | La Sapienza University of Rome
   | a.y. 2022/2023
   |
+  | Final project for the course:
 output: 
   pdf_document: default
   html_document: default
@@ -322,8 +322,25 @@ To predict the fertility status (binary) of a man we will then use the logistic 
 
 ## 3.2  Bayesian probit regression model
 
+The Probit model is a statistical method used for binary classification and estimation of probabilities. It's particularly useful when dealing with categorical outcomes where the response variable can take one of two possible values, often denoted as 0 or 1. The model assumes that there is an underlying continuous latent variable that determines the outcome, and this latent variable follows a standard normal (Gaussian) distribution.
 
-# 4 First model
+In the Probit model, the relationship between the predictor variables (also called independent variables or features) and the binary outcome is modeled through the cumulative distribution function of the standard normal distribution. This function transforms the linear combination of predictor variables into a probability that the outcome will be 1.
+
+Mathematically, the Probit model can be represented as follows:
+
+$$ P(Y = 1 | X) = \Phi(\beta_0 + \beta_1X_1 + \beta_2X_2 + ... + \beta_kX_k)$$
+
+Where:
+
+$P(Y = 1 | X)$ is the probability of the binary outcome being 1 given the predictor variables X.
+$\Phi$ represents the cumulative distribution function of the standard normal distribution.
+$\beta_0, \beta_1,... ,\beta_k$ are the coefficients associated with the predictor variables $X_1, X_2, ..., X_k.$
+The Probit model estimates these coefficients based on the observed data, aiming to find the best-fitting model that explains the relationship between the predictors and the binary outcome. The coefficients indicate how the predictor variables influence the probability of the binary outcome occurring.
+
+In summary, the Probit model is a statistical approach used to analyze and predict binary outcomes by modeling the relationship between predictor variables and probabilities through the cumulative distribution function of the standard normal distribution.
+
+
+# 4. First model
 
 The first model then consists of a simple logistic regression in which the parameters used are relative to each of the variables in the original data set. 
 
@@ -417,8 +434,7 @@ my.logistic <- jags(data=dd,
                     n.chains=3,
                     n.iter=10000, 
                     n.burnin=2000)
-```
-```{r results='markup'}
+
 #mcmc_samples <- as.mcmc(my.logistic)
 
 # Summarize MCMC samples
@@ -439,13 +455,13 @@ my.logistic <- jags(data=dd,
 ```
 
 
-## 5 MCMC convergence analysis
+## 4.1 MCMC convergence analysis
 
 ```{r}
 traplot(my.logistic, params)
 
 # ACF plots
-#autocorr.plot(betas)
+# autocorr.plot(params)
 
 # Gelman-Rubin diagnostic (should be close to 1 for convergence)
 # gelman.diag(mcmc_samples)
@@ -456,9 +472,9 @@ traplot(my.logistic, params)
 ```
 
 
-# Prediction
+## 4.2 Prediction
 
-```{r}
+```{r results='hold'}
 coeffs <- colMeans(my.logistic$BUGSoutput$sims.matrix)
 
 log.func <- function(coeffs, test, threshold){
@@ -481,9 +497,10 @@ log.func <- function(coeffs, test, threshold){
 }
 
 preds <- log.func(coeffs, test, 0.2)
-sum(test$Out==preds)/length(preds)
+print(paste("Accuracy:", sum(test$Out==preds)/length(preds)))
+
 ```
-# 6 Second model
+# 5. Second model
 ```{r include=TRUE, echo=TRUE}
 
 cat("model {
@@ -513,36 +530,32 @@ cat("model {
 
 ```{r}
 
-my.probit <- jags(data=dd,
-                  inits=inits,
-                  parameters.to.save=params,
-                  model.file="probit_regr.txt",
-                  n.chains=3,
-                  n.iter=10000, 
-                  n.burnin=2000)
-
-```
-```{r}
-coeffs2 <- colMeans(my.probit$BUGSoutput$sims.matrix)
-
-probit.func <- function(coeffs, test, threshold){
-   # Extract coefficients
-  intercept <- coeffs[1]
-  coefficients <- coeffs[-1]
-  
-  # Calculate linear predictor
-  linear_predictor <- ntercept + as.matrix(test) %*% coefficients
-  
-  # Calculate predicted probabilities using Probit function
-  predicted_probs <- pnorm(linear_predictor)
-  
-  # Return predicted probabilities
-  return(predicted_probs)
-}
-
-preds <- log.func(coeffs2, test, 0.2)
-sum(test$Out==preds)/length(preds)
+# my.probit <- jags(data=dd,
+#                   inits=inits,
+#                   parameters.to.save=params,
+#                   model.file="probit_regr.txt",
+#                   n.chains=3,
+#                   n.iter=10000, 
+#                   n.burnin=2000)
+# 
+# coeffs2 <- colMeans(my.probit$BUGSoutput$sims.matrix)
+# 
+# probit.func <- function(coeffs, test, threshold){
+#    # Extract coefficients
+#   intercept <- coeffs[1]
+#   coefficients <- coeffs[-1]
+#   
+#   # Calculate linear predictor
+#   linear_predictor <- ntercept + as.matrix(test) %*% coefficients
+#   
+#   # Calculate predicted probabilities using Probit function
+#   predicted_probs <- pnorm(linear_predictor)
+#   
+#   # Return predicted probabilities
+#   return(predicted_probs)
+# }
+# 
+# preds <- log.func(coeffs2, test, 0.2)
+# sum(test$Out==preds)/length(preds)
 ```
 
-
-# References

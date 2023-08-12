@@ -6,6 +6,7 @@
 \contentsline {section}{3. Proposed statistical models}{9}{section*.7}%
 \contentsline {subsection}{3.1 Bayesian logistic regression model}{9}{section*.8}%
 \contentsline {subsection}{3.2 Bayesian probit regression model}{10}{section*.9}%
-\contentsline {section}{4 First model}{10}{section*.10}%
-\contentsline {subsection}{5 MCMC convergence analysis}{13}{section*.11}%
-\contentsline {section}{References}{26}{section*.12}%
+\contentsline {section}{4. First model}{11}{section*.10}%
+\contentsline {subsection}{4.1 MCMC convergence analysis}{12}{section*.11}%
+\contentsline {subsection}{4.2 Prediction}{12}{section*.12}%
+\contentsline {section}{5. Second model}{13}{section*.13}%
