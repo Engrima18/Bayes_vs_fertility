@@ -29,3 +29,15 @@ The study of correlations between features is also relevant to understanding the
 
 <img width="485" alt="plot3" src="https://github.com/Engrima18/Bayes_vs_fertility/assets/93355495/4a4a17da-1953-46d7-a0bf-76e55e15a77b">
 
+See the `report.pdf` file for a deeper analysis.
+
+## The models 
+
+In the `fertility.rmd` file you can find the bayesian analysis (complete of convergence analysis of the MCMC).
+We used a **Bayesian Logistic Regression** and a **Probit  Regression** to predict the two classes of interest (normal vs altered sperm) and study the convergence of parameters for both models.
+
+# Used technologies
+
+![RStudio](https://img.shields.io/badge/RStudio-4285F4?style=for-the-badge&logo=rstudio&logoColor=white)
+![R](https://img.shields.io/badge/r-%23276DC3.svg?style=for-the-badge&logo=r&logoColor=white)
+
