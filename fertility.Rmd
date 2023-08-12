@@ -73,7 +73,7 @@ Let's give a look to the first rows of the [used data set](https://archive.ics.u
 \
 ```{r results='asis'}
 # get the data set
-Fertility.data <- read.csv("fertility_Diagnosis.txt")
+Fertility.data <- read.csv("data/fertility_Diagnosis.txt")
 
 colnames(Fertility.data) <- c("Season", "Age", "Disease", "Accident", "Surgery", "Fever", "Alcohol", "Smoking", "Sedentarity", "Out")
 
@@ -457,6 +457,8 @@ my.logistic <- jags(data=dd,
 
 ## 4.1 MCMC convergence analysis
 
+We note that the Monte Carlo Markov Chains used for sampling from the logistic model converge ensuring a certain correctness of our results
+
 ```{r}
 traplot(my.logistic, params)
 
@@ -473,6 +475,8 @@ traplot(my.logistic, params)
 
 
 ## 4.2 Prediction
+
+As mentioned above, we are solely interested in the study of parameters for identifying the relationships between predictors (features) and the target variable, but we report the level of accuracy obtained anyway.
 
 ```{r results='hold'}
 coeffs <- colMeans(my.logistic$BUGSoutput$sims.matrix)
@@ -501,6 +505,9 @@ print(paste("Accuracy:", sum(test$Out==preds)/length(preds)))
 
 ```
 # 5. Second model
+
+The next step would be to search for further improvements by using another model and comparing it with the previous logistic regression. However, we leave the evaluation and comparison to a second futtura analysis for possible improvement of the project...
+
 ```{r include=TRUE, echo=TRUE}
 
 cat("model {
